@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  server:
+    name: Server (.NET, Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore server/AudioRelay.slnx
+
+      - name: Build
+        run: dotnet build server/AudioRelay.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test server/AudioRelay.slnx --configuration Release --no-build --verbosity normal
+
+  client:
+    name: Client (Flutter, Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Flutter doctor
+        run: flutter --version
+        working-directory: client
+
+      - name: Pub get
+        run: flutter pub get
+        working-directory: client
+
+      - name: Analyze
+        run: flutter analyze
+        working-directory: client
+        continue-on-error: true
+
+      - name: Build APK
+        run: flutter build apk --release
+        working-directory: client
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-relay-android
+          path: client/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn

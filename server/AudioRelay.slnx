@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AudioRelay.App/AudioRelay.App.csproj" />
+    <Project Path="src/AudioRelay.Audio/AudioRelay.Audio.csproj" />
+    <Project Path="src/AudioRelay.Codec/AudioRelay.Codec.csproj" />
+    <Project Path="src/AudioRelay.Signaling/AudioRelay.Signaling.csproj" />
+    <Project Path="src/AudioRelay.WebRTC/AudioRelay.WebRTC.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AudioRelay.App.Tests/AudioRelay.App.Tests.csproj" />
+    <Project Path="tests/AudioRelay.Audio.Tests/AudioRelay.Audio.Tests.csproj" />
+    <Project Path="tests/AudioRelay.Codec.Tests/AudioRelay.Codec.Tests.csproj" />
+    <Project Path="tests/AudioRelay.Signaling.Tests/AudioRelay.Signaling.Tests.csproj" />
+    <Project Path="tests/AudioRelay.WebRTC.Tests/AudioRelay.WebRTC.Tests.csproj" />
+  </Folder>
+</Solution>

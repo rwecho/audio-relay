@@ -1,0 +1,20 @@
+name: audio_relay_client
+description: Play PC system audio on your phone (Audio Relay client).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_webrtc: ^0.12.0
+  mobile_scanner: ^5.2.0
+  http: ^1.2.2
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

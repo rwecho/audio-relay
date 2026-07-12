@@ -1,0 +1,28 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+TestResults/
+coverage/
+
+# Flutter / Dart
+client/build/
+client/.dart_tool/
+client/.packages
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+client/.pub-cache/
+client/.pub/
+client/pubspec.lock
+**/.fvm/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
