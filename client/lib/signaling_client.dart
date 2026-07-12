@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http';
+import 'package:http/http.dart' as http;
 
 /// Minimal signaling client: POSTs a WebRTC offer to the PC's `/offer` endpoint with the
 /// pairing PIN and returns the answer SDP. Raises on non-200 so the UI can surface errors.
