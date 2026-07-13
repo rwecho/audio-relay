@@ -27,6 +27,20 @@ jobs:
       - name: Test
         run: dotnet test server/AudioRelay.slnx --configuration Release --no-build --verbosity normal
 
+      - name: Publish (self-contained win-x64)
+        run: dotnet publish server/src/AudioRelay.App/AudioRelay.App.csproj --configuration Release --runtime win-x64 --self-contained true -o server/publish/win-x64
+
+      - name: Zip publish output
+        shell: pwsh
+        run: Compress-Archive -Path server/publish/win-x64/* -DestinationPath server/audio-relay-server-win-x64.zip -CompressionLevel Optimal
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-relay-server-win-x64
+          path: server/audio-relay-server-win-x64.zip
+          if-no-files-found: error
+
   client:
     name: Client (Flutter, Android)
     runs-on: ubuntu-latest
