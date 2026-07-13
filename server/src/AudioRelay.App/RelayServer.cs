@@ -103,7 +103,7 @@ public sealed class RelayServer : IDisposable
 
         _capturer = CreateCapturer();
         _capturer.DefaultDeviceChanged += OnDefaultDeviceChanged;
-        _pipeline = new AudioPipeline(_capturer, _publisher) { Volume = _settings.Volume };
+        _pipeline = new AudioPipeline(_capturer, dataSink: _publisher) { Volume = _settings.Volume };
 
         _pipeline.StartCapture();              // meter keeps running
         if (wasSending) _pipeline.StartSending();
