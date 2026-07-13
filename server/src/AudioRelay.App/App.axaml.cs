@@ -34,9 +34,16 @@ public partial class App : Application
         }
 
         var devices = AudioDevices.ListRender();
+        var adapters = Network.GetCandidateAddresses();
+        var selectedAdapter = adapters.FirstOrDefault(a => a.Ip == _settings.SelectedAdapterIp)
+                              ?? adapters.FirstOrDefault();
+        string initialIp = selectedAdapter?.Ip ?? "127.0.0.1";
+
         var vm = new MainWindowViewModel
         {
-            QrPayload = QrPayload.Build($"http://{Network.GetLanIpAddress()}:{_settings.Port}", _settings.Pin),
+            Adapters = adapters,
+            SelectedAdapter = selectedAdapter,
+            QrPayload = QrPayload.Build($"http://{initialIp}:{_settings.Port}", _settings.Pin),
             Volume = _settings.Volume,
             Devices = devices,
             SelectedDevice = _settings.DeviceId is null ? null : devices.FirstOrDefault(d => d.Id == _settings.DeviceId),
@@ -51,6 +58,11 @@ public partial class App : Application
         {
             switch (e.PropertyName)
             {
+                case nameof(MainWindowViewModel.SelectedAdapter):
+                    _settings.SelectedAdapterIp = vm.SelectedAdapter?.Ip;
+                    vm.QrPayload = QrPayload.Build(AdapterUrl(vm), _settings.Pin);
+                    SaveSettings();
+                    break;
                 case nameof(MainWindowViewModel.Volume):
                     _settings.Volume = vm.Volume;
                     _server.Volume = vm.Volume;
@@ -88,6 +100,8 @@ public partial class App : Application
             desktop.MainWindow = new MainWindow { DataContext = vm };
 
         base.OnFrameworkInitializationCompleted();
+
+        string AdapterUrl(MainWindowViewModel v) => $"http://{v.SelectedAdapter?.Ip ?? "127.0.0.1"}:{_settings.Port}";
 
         void SaveSettings()
         {

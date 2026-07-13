@@ -9,6 +9,9 @@ public sealed class Settings
     public double Volume { get; set; } = 1.0;
     public bool AutoStart { get; set; }
 
+    /// <summary>Last-selected network adapter IP for the QR payload (null = auto-pick best candidate).</summary>
+    public string? SelectedAdapterIp { get; set; }
+
     /// <summary>Fresh settings with a randomly-generated PIN (used when no file exists yet).</summary>
     public static Settings WithDefaults() => new()
     {

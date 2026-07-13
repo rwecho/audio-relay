@@ -76,6 +76,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set { _selectedDevice = value; OnPropertyChanged(); }
     }
 
+    private IReadOnlyList<AdapterCandidate> _adapters = Array.Empty<AdapterCandidate>();
+    private AdapterCandidate? _selectedAdapter;
+
+    /// <summary>Pickable network adapters; the selected one drives the IP embedded in the QR payload.</summary>
+    public IReadOnlyList<AdapterCandidate> Adapters
+    {
+        get => _adapters;
+        set { _adapters = value; OnPropertyChanged(); }
+    }
+
+    public AdapterCandidate? SelectedAdapter
+    {
+        get => _selectedAdapter;
+        set { _selectedAdapter = value; OnPropertyChanged(); }
+    }
+
     private void UpdateStatus()
     {
         Status = _clientConnected

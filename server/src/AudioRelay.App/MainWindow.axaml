@@ -4,13 +4,13 @@
         x:Class="AudioRelay.App.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Audio Relay"
-        Width="380" Height="640"
-        MinWidth="380" MinHeight="640"
+        Width="380" Height="720"
+        MinWidth="380" MinHeight="720"
         WindowStartupLocation="CenterScreen"
         CanResize="False"
         Background="#1C1C1E">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="32,24,32,28">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="32,24,32,28">
 
         <TextBlock Grid.Row="0"
                    Text="Audio Relay"
@@ -19,7 +19,21 @@
                    HorizontalAlignment="Center"
                    Margin="0,0,0,6" />
 
-        <Border Grid.Row="1"
+        <ComboBox Grid.Row="1"
+                  ItemsSource="{Binding Adapters}"
+                  SelectedItem="{Binding SelectedAdapter}"
+                  HorizontalAlignment="Center"
+                  MinWidth="260"
+                  Margin="0,0,0,12"
+                  PlaceholderText="选择网卡">
+            <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:AdapterCandidate">
+                    <TextBlock Text="{Binding Display}" />
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <Border Grid.Row="2"
                 Background="White"
                 CornerRadius="20"
                 Padding="14"
@@ -29,34 +43,34 @@
             <Image Name="QrImage" Width="196" Height="196" />
         </Border>
 
-        <TextBlock Grid.Row="2"
+        <TextBlock Grid.Row="3"
                    Text="{Binding Status}"
                    FontSize="17" FontWeight="SemiBold"
                    Foreground="White"
                    HorizontalAlignment="Center"
                    Margin="0,0,0,2" />
 
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="4"
                    Text="{Binding QrPayload}"
                    FontSize="10"
                    Foreground="#636366"
                    HorizontalAlignment="Center"
                    Margin="0,2,0,2" />
 
-        <TextBlock Grid.Row="4"
+        <TextBlock Grid.Row="5"
                    Text="{Binding StatsSummary}"
                    FontSize="11"
                    Foreground="#AEAEB2"
                    HorizontalAlignment="Center"
                    Margin="0,2,0,12" />
 
-        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
             <TextBlock Text="🔊" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
             <Slider Minimum="0" Maximum="1.5" Value="{Binding Volume}"
                     Width="200" TickFrequency="0.1" />
         </StackPanel>
 
-        <ComboBox Grid.Row="6"
+        <ComboBox Grid.Row="7"
                   ItemsSource="{Binding Devices}"
                   SelectedItem="{Binding SelectedDevice}"
                   HorizontalAlignment="Center"
@@ -69,7 +83,7 @@
             </ComboBox.ItemTemplate>
         </ComboBox>
 
-        <CheckBox Grid.Row="7"
+        <CheckBox Grid.Row="8"
                   Content="开机自启"
                   IsChecked="{Binding AutoStart}"
                   Foreground="#AEAEB2"
