@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http';
+import 'package:http/http.dart' as http;
 
 /// Signaling client. The server is the SDP offerer: we POST /offer to get its offer, then
 /// POST /answer with our answer. Raises on non-200 so the UI can surface errors.

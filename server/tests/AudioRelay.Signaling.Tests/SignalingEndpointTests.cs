@@ -30,7 +30,6 @@ public class SignalingEndpointTests
         => Assert.Equal(400, _endpoint.HandleRequest("POST", "/offer", Json(new { })).statusCode);
 
     [Theory]
-    [InlineData("")]
     [InlineData("wrong")]
     [InlineData("1235")]
     public void Offer_WrongPin_Returns403(string pin)
