@@ -29,7 +29,7 @@ public sealed class RelayServer : IDisposable
         _publisher = new RtcMediaPublisher();
         _capturer = CreateCapturer();
         _pipeline = new AudioPipeline(_capturer, _publisher) { Volume = settings.Volume };
-        _endpoint = new SignalingEndpoint(settings.Pin, _publisher);
+        _endpoint = new SignalingEndpoint(settings.Pin, _publisher, () => _publisher.GetStats());
         _host = new SignalingKestrelHost($"http://0.0.0.0:{settings.Port}", _endpoint);
 
         _publisher.ClientConnectionChanged += OnClientConnection;

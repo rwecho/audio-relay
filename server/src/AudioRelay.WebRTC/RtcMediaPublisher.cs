@@ -74,13 +74,18 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
             _track = track;
 
             // Generate the offer and wait for ICE gathering to embed host candidates (LAN).
-            peer.SetLocalDescription(RtcDescriptionType.Offer);
-
+            // Subscribe BEFORE SetLocalDescription: on LAN, host candidates can gather in
+            // milliseconds, so subscribing after risks missing the COMPLETE event (intermittent
+            // "ICE gathering timed out").
             var gathered = new ManualResetEventSlim(false);
             peer.OnGatheringStateChange += (_, g) =>
             {
                 if (g == rtcGatheringState.RTC_GATHERING_COMPLETE) gathered.Set();
             };
+
+            peer.SetLocalDescription(RtcDescriptionType.Offer);
+            if (peer.GatheringState == rtcGatheringState.RTC_GATHERING_COMPLETE)
+                gathered.Set(); // defensive: completed synchronously
 
             if (!gathered.Wait(TimeSpan.FromSeconds(5)))
                 throw new SignalingException(503, "ICE gathering timed out");

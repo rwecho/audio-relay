@@ -15,14 +15,23 @@ public static class BrowserClientPage
 <p>输入服务端显示的 PIN</p>
 <input id='pin' placeholder='PIN' maxlength='8' inputmode='numeric'>
 <button id='go'>连接</button>
+<button id='playbtn' style='display:none;background:#34C759'>🔊 点击播放声音</button>
 <div id='status'>就绪</div>
 <script>
 window.__ar_conn = 'new';
 window.__ar_track = false;
+let _audio = null;
 const params = new URLSearchParams(location.search);
 if (params.get('pin')) document.getElementById('pin').value = params.get('pin');
 const status = document.getElementById('status');
+const playBtn = document.getElementById('playbtn');
 const post = (path, obj) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
+function tryPlay() {
+  if (!_audio) return;
+  _audio.play().then(() => { status.textContent = '正在播放'; playBtn.style.display = 'none'; window.__ar_track = true; })
+    .catch(() => { playBtn.style.display = ''; status.textContent = '点上面的绿色按钮以播放'; });
+}
+playBtn.onclick = () => tryPlay();
 document.getElementById('go').onclick = async () => {
   const pin = document.getElementById('pin').value.trim();
   if (!pin) { status.textContent = '请输入 PIN'; return; }
@@ -32,10 +41,9 @@ document.getElementById('go').onclick = async () => {
     pc.ontrack = (e) => {
       window.__ar_track = true;
       console.log('[ar] ontrack kind=' + e.track.kind);
-      const a = new Audio();
-      a.srcObject = e.streams[0];
-      a.play().catch(() => { console.log('[ar] autoplay blocked'); document.body.onclick = () => a.play(); });
-      status.textContent = '正在播放';
+      _audio = new Audio();
+      _audio.srcObject = e.streams[0];
+      tryPlay();
     };
     pc.onconnectionstatechange = () => { window.__ar_conn = pc.connectionState; console.log('[ar] conn=' + pc.connectionState); };
 

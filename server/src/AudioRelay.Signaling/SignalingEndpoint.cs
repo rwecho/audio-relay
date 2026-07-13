@@ -18,15 +18,20 @@ public sealed class SignalingEndpoint
 
     private readonly string _expectedPin;
     private readonly ISignalingHandler _handler;
+    private readonly Func<object?>? _statsProvider;
 
-    public SignalingEndpoint(string expectedPin, ISignalingHandler handler)
+    public SignalingEndpoint(string expectedPin, ISignalingHandler handler, Func<object?>? statsProvider = null)
     {
         _expectedPin = expectedPin ?? throw new ArgumentNullException(nameof(expectedPin));
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+        _statsProvider = statsProvider;
     }
 
     public (int statusCode, string body) HandleRequest(string method, string path, string? bodyJson)
     {
+        if (method == "GET" && path == "/stats" && _statsProvider is not null)
+            return (200, JsonSerializer.Serialize(_statsProvider(), JsonOptions));
+
         if (path != "/offer" && path != "/answer")
             return (404, ErrorBody("Not found"));
         if (method != "POST")
