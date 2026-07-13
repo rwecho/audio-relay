@@ -6,9 +6,9 @@ using AudioRelay.WebRTC;
 namespace AudioRelay.App;
 
 /// <summary>
-/// Assembles the relay: WASAPI capture → framing/Opus/gain → WebRTC publisher, with HTTP
-/// signaling over Kestrel. Capture runs always-on (driving the level/bass meters); Opus encode/send
-/// is gated to only while a client is connected. Integration assembly; excluded from coverage.
+/// Assembles the relay: WASAPI capture → framing/Opus/gain → WebRTC publisher (multi-listener),
+/// with HTTP signaling over Kestrel. Capture runs always-on (driving the level/bass meters); Opus
+/// encode/send is gated to only while at least one client is connected. Integration assembly.
 /// </summary>
 [ExcludeFromCodeCoverage]
 public sealed class RelayServer : IDisposable
@@ -54,9 +54,15 @@ public sealed class RelayServer : IDisposable
     /// <summary>Live bass-band impact (0..1) driving the rhythm-particle effect.</summary>
     public double CurrentBass => _pipeline.Bass.LatestBass;
 
+    /// <summary>Number of listeners currently connected.</summary>
+    public int CurrentClientCount => _publisher.ConnectedCount;
+
+    /// <summary>Per-listener telemetry (id, fps, latency) for the UI.</summary>
+    public IReadOnlyList<ConnectedClient> GetClients() => _publisher.GetClients();
+
     public PublisherStats GetStats() => _publisher.GetStats();
 
-    /// <summary>Object serialized by GET /stats: publish counters + live audio level/bass.</summary>
+    /// <summary>Object serialized by GET /stats: counters + level/bass + per-listener detail.</summary>
     private object BuildStats()
     {
         var p = _publisher.GetStats();
@@ -67,7 +73,9 @@ public sealed class RelayServer : IDisposable
             p.ClientConnected,
             Level = _pipeline.Level.LatestRms,
             Peak = _pipeline.Level.LatestPeak,
-            Bass = _pipeline.Bass.LatestBass
+            Bass = _pipeline.Bass.LatestBass,
+            ConnectedCount = _publisher.ConnectedCount,
+            Clients = _publisher.GetClients()
         };
     }
 
@@ -101,8 +109,6 @@ public sealed class RelayServer : IDisposable
 
     private void OnDefaultDeviceChanged(object? sender, EventArgs e)
     {
-        // Same capturer object; restart inner capture on the new default. Pipeline keeps its
-        // subscription + capture/sending flags.
         _log.Info("Default audio device changed; restarting capture.");
         _capturer.Stop();
         _capturer.Start();

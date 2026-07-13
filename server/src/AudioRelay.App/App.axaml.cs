@@ -90,8 +90,13 @@ public partial class App : Application
             if (_server is { } s)
             {
                 var st = s.GetStats();
+                var clients = s.GetClients();
+                vm.ConnectedCount = clients.Count;
+                vm.ClientLines = clients
+                    .Select(c => $"#{c.Id} · {c.Fps:0.0} fps · {(c.LatencyMs.HasValue ? $"{c.LatencyMs.Value:0} ms" : "—")}")
+                    .ToList();
                 vm.StatsSummary = st.ClientConnected
-                    ? $"已发 {st.FramesSent} 帧 · {st.BytesSent / 1024} KB"
+                    ? $"已连接 {clients.Count} 个客户端 · 已发 {st.FramesSent} 帧"
                     : "空闲";
             }
         });

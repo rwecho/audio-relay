@@ -117,6 +117,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set { _bass = value; OnPropertyChanged(); }
     }
 
+    private int _connectedCount;
+    private IReadOnlyList<string> _clientLines = Array.Empty<string>();
+
+    /// <summary>Number of currently-connected listeners + a formatted line per listener.</summary>
+    public int ConnectedCount
+    {
+        get => _connectedCount;
+        set { _connectedCount = value; OnPropertyChanged(); }
+    }
+
+    public IReadOnlyList<string> ClientLines
+    {
+        get => _clientLines;
+        set { _clientLines = value; OnPropertyChanged(); }
+    }
+
     private void UpdateStatus()
     {
         Status = _clientConnected
