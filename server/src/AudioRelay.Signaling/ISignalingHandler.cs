@@ -1,11 +1,14 @@
 namespace AudioRelay.Signaling;
 
 /// <summary>
-/// Produces the WebRTC answer SDP for a verified offer. Implementations own the
-/// PeerConnection lifecycle (libdatachannel). Throws <see cref="SignalingException"/>
-/// to return a specific status code to the client.
+/// Server-side WebRTC negotiation (the server is the SDP offerer and audio sender).
+/// Implementations own the PeerConnection lifecycle (libdatachannel).
 /// </summary>
 public interface ISignalingHandler
 {
-    SignalingAnswer HandleOffer(SignalingOffer offer);
+    /// <summary>Create the server's SDP offer (with its SendOnly Opus audio track).</summary>
+    SignalingSdp CreateOffer();
+
+    /// <summary>Apply the client's answer SDP. Throws <see cref="SignalingException"/> on failure.</summary>
+    void ApplyAnswer(string answerSdp);
 }

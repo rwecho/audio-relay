@@ -11,8 +11,7 @@ public class SignalingEndpointTests
 
     public SignalingEndpointTests() => _endpoint = new SignalingEndpoint(Pin, _handler);
 
-    private static string OfferJson(string sdp = "v=0", string type = "offer", string pin = Pin) =>
-        JsonSerializer.Serialize(new { sdp, type, pin });
+    private static string Json(object o) => JsonSerializer.Serialize(o);
 
     [Fact]
     public void UnknownPath_Returns404()
@@ -23,81 +22,96 @@ public class SignalingEndpointTests
         => Assert.Equal(405, _endpoint.HandleRequest("GET", "/offer", "").statusCode);
 
     [Fact]
-    public void MalformedJson_Returns400()
+    public void Offer_MalformedJson_Returns400()
         => Assert.Equal(400, _endpoint.HandleRequest("POST", "/offer", "{not json").statusCode);
 
     [Fact]
-    public void EmptyBody_Returns400()
-        => Assert.Equal(400, _endpoint.HandleRequest("POST", "/offer", "").statusCode);
-
-    [Fact]
-    public void MissingSdp_Returns400()
-        => Assert.Equal(400,
-            _endpoint.HandleRequest("POST", "/offer", JsonSerializer.Serialize(new { type = "offer", pin = Pin })).statusCode);
-
-    [Fact]
-    public void TypeNotOffer_Returns400()
-        => Assert.Equal(400, _endpoint.HandleRequest("POST", "/offer", OfferJson(type: "answer")).statusCode);
+    public void Offer_MissingPin_Returns400()
+        => Assert.Equal(400, _endpoint.HandleRequest("POST", "/offer", Json(new { })).statusCode);
 
     [Theory]
     [InlineData("")]
     [InlineData("wrong")]
     [InlineData("1235")]
-    public void WrongPin_Returns403(string pin)
-        => Assert.Equal(403, _endpoint.HandleRequest("POST", "/offer", OfferJson(pin: pin)).statusCode);
+    public void Offer_WrongPin_Returns403(string pin)
+        => Assert.Equal(403, _endpoint.HandleRequest("POST", "/offer", Json(new { pin })).statusCode);
 
     [Fact]
-    public void CorrectPin_Returns200AndAnswer()
+    public void Offer_CorrectPin_Returns200AndServerOffer()
     {
-        _handler.Answer = new SignalingAnswer("ANSWER_SDP", "answer");
+        _handler.OfferToReturn = new SignalingSdp("SERVER_OFFER_SDP", "offer");
 
-        var (status, body) = _endpoint.HandleRequest("POST", "/offer", OfferJson(sdp: "OFFER_SDP"));
+        var (status, body) = _endpoint.HandleRequest("POST", "/offer", Json(new { pin = Pin }));
 
         Assert.Equal(200, status);
-        var answer = JsonSerializer.Deserialize<SignalingAnswer>(body);
-        Assert.NotNull(answer);
-        Assert.Equal("ANSWER_SDP", answer!.Sdp);
-        Assert.Equal("answer", answer.Type);
+        var sdp = JsonSerializer.Deserialize<SignalingSdp>(body);
+        Assert.NotNull(sdp);
+        Assert.Equal("SERVER_OFFER_SDP", sdp!.Sdp);
+        Assert.Equal("offer", sdp.Type);
     }
 
     [Fact]
-    public void CorrectPin_ForwardsOfferSdpToHandler()
+    public void Answer_CorrectPinAndSdp_AppliesAnswer_Returns200()
     {
-        _handler.Answer = new SignalingAnswer("a", "answer");
-        _endpoint.HandleRequest("POST", "/offer", OfferJson(sdp: "FORWARDED_SDP"));
+        var (status, body) = _endpoint.HandleRequest("POST", "/answer",
+            Json(new { sdp = "CLIENT_ANSWER", type = "answer", pin = Pin }));
 
-        Assert.Equal("FORWARDED_SDP", _handler.LastReceived?.Sdp);
+        Assert.Equal(200, status);
+        Assert.Equal("CLIENT_ANSWER", _handler.LastAppliedAnswer);
     }
 
     [Fact]
-    public void HandlerSignalingException_ReturnsItsStatusCode()
-    {
-        _handler.Throw = new SignalingException(503, "server busy");
+    public void Answer_WrongPin_Returns403()
+        => Assert.Equal(403,
+            _endpoint.HandleRequest("POST", "/answer", Json(new { sdp = "x", type = "answer", pin = "bad" })).statusCode);
 
-        var (status, body) = _endpoint.HandleRequest("POST", "/offer", OfferJson());
+    [Fact]
+    public void Answer_TypeNotAnswer_Returns400()
+        => Assert.Equal(400,
+            _endpoint.HandleRequest("POST", "/answer", Json(new { sdp = "x", type = "offer", pin = Pin })).statusCode);
+
+    [Fact]
+    public void Answer_MissingSdp_Returns400()
+        => Assert.Equal(400,
+            _endpoint.HandleRequest("POST", "/answer", Json(new { type = "answer", pin = Pin })).statusCode);
+
+    [Fact]
+    public void CreateOffer_SignalingException_ReturnsItsStatusCode()
+    {
+        _handler.OfferToReturn = new SignalingSdp("x", "offer");
+        _handler.OfferThrow = new SignalingException(503, "busy");
+
+        var (status, body) = _endpoint.HandleRequest("POST", "/offer", Json(new { pin = Pin }));
 
         Assert.Equal(503, status);
-        Assert.Contains("server busy", body);
+        Assert.Contains("busy", body);
     }
 
     [Fact]
-    public void HandlerUnexpectedException_Returns500()
+    public void ApplyAnswer_UnexpectedException_Returns500()
     {
-        _handler.Throw = new InvalidOperationException("boom");
-        Assert.Equal(500, _endpoint.HandleRequest("POST", "/offer", OfferJson()).statusCode);
+        _handler.AnswerThrow = new InvalidOperationException("boom");
+        Assert.Equal(500,
+            _endpoint.HandleRequest("POST", "/answer", Json(new { sdp = "x", type = "answer", pin = Pin })).statusCode);
     }
 
     private sealed class FakeHandler : ISignalingHandler
     {
-        public SignalingAnswer Answer { get; set; } = new("default", "answer");
-        public SignalingOffer? LastReceived { get; private set; }
-        public Exception? Throw { get; set; }
+        public SignalingSdp OfferToReturn { get; set; } = new("default", "offer");
+        public Exception? OfferThrow { get; set; }
+        public Exception? AnswerThrow { get; set; }
+        public string? LastAppliedAnswer { get; private set; }
 
-        public SignalingAnswer HandleOffer(SignalingOffer offer)
+        public SignalingSdp CreateOffer()
         {
-            LastReceived = offer;
-            if (Throw is not null) throw Throw;
-            return Answer;
+            if (OfferThrow is not null) throw OfferThrow;
+            return OfferToReturn;
+        }
+
+        public void ApplyAnswer(string answerSdp)
+        {
+            if (AnswerThrow is not null) throw AnswerThrow;
+            LastAppliedAnswer = answerSdp;
         }
     }
 }

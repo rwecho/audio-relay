@@ -4,10 +4,9 @@ import 'signaling_client.dart';
 
 enum RtcStatus { connecting, playing, reconnecting, failed }
 
-/// WebRTC client (offerer, recv-only). Exchanges SDP via the PC's signaling endpoint,
-/// plays the incoming audio track, and auto-reconnects with exponential backoff when the
-/// peer connection drops (screen lock, background, network blip). UNVERIFIED — needs
-/// flutter SDK + E2E.
+/// WebRTC client (answerer, recv-only). Gets the server's offer, answers it, plays the
+/// incoming audio track, and auto-reconnects with exponential backoff when the peer
+/// connection drops. UNVERIFIED — needs flutter SDK + E2E.
 class WebRtcClient {
   final SignalingClient _signaling;
   RTCPeerConnection? _pc;
@@ -34,11 +33,6 @@ class WebRtcClient {
       await _pc?.dispose();
       _pc = await createPeerConnection({'iceServers': <Map<String, dynamic>>[]});
 
-      await _pc!.addTransceiver(
-        kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
-        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
-      );
-
       _pc!.onTrack = (RTCTrackEvent event) {
         if (event.track.kind == 'audio') {
           _audioTrack = event.track;
@@ -56,10 +50,14 @@ class WebRtcClient {
         }
       };
 
-      final offer = await _pc!.createOffer(<String, dynamic>{});
-      await _pc!.setLocalDescription(offer);
+      // The server is the offerer: fetch its offer, answer it.
+      final offerSdp = await _signaling.requestOffer();
+      await _pc!.setRemoteDescription(RTCSessionDescription(offerSdp, 'offer'));
 
-      // Non-trickle: wait for ICE gathering to embed host candidates.
+      final answer = await _pc!.createAnswer(<String, dynamic>{});
+      await _pc!.setLocalDescription(answer);
+
+      // Non-trickle: wait for ICE gathering to embed host candidates in our answer.
       final gathered = Completer<void>();
       _pc!.onIceGatheringState = (s) {
         if (s == RTCIceGatheringState.RTCIceGatheringStateComplete && !gathered.isCompleted) {
@@ -71,9 +69,8 @@ class WebRtcClient {
       }
       await gathered.future.timeout(const Duration(seconds: 3));
 
-      final localOffer = await _pc!.getLocalDescription();
-      final answerSdp = await _signaling.createAnswer(localOffer!.sdp!);
-      await _pc!.setRemoteDescription(RTCSessionDescription(answerSdp, 'answer'));
+      final localAnswer = await _pc!.getLocalDescription();
+      await _signaling.submitAnswer(localAnswer!.sdp!);
       if (_audioTrack != null) _audioTrack!.enabled = !_muted;
     } catch (_) {
       _scheduleReconnect();
@@ -84,7 +81,7 @@ class WebRtcClient {
     if (_disposed) return;
     _statusController.add(RtcStatus.reconnecting);
     _attempts++;
-    final seconds = _attempts > 5 ? 5 : _attempts; // backoff capped at 5s
+    final seconds = _attempts > 5 ? 5 : _attempts;
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(Duration(seconds: seconds), () {
       if (!_disposed) _doConnect();

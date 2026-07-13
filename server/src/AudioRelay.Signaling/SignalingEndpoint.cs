@@ -4,14 +4,13 @@ using System.Text.Json.Serialization;
 namespace AudioRelay.Signaling;
 
 /// <summary>
-/// Pure signaling request handler: validates method/path/JSON/PIN and dispatches to
-/// the WebRTC handler, returning an HTTP status + JSON body. Transport (Kestrel) lives
-/// in the host app and delegates here, so this logic is fully unit-testable.
+/// Pure signaling request handler. The server is the SDP offerer / audio sender:
+///   POST /offer  {pin}                 → 200 {sdp, type:"offer"}   (server's offer)
+///   POST /answer {sdp, type, pin}      → 200 {}                     (apply client's answer)
+/// Transport (Kestrel) delegates here; logic is fully unit-testable.
 /// </summary>
 public sealed class SignalingEndpoint
 {
-    private const string OfferPath = "/offer";
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -26,47 +25,52 @@ public sealed class SignalingEndpoint
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
     }
 
-    /// <summary>Returns the HTTP status code and response body for a signaling request.</summary>
     public (int statusCode, string body) HandleRequest(string method, string path, string? bodyJson)
     {
-        if (path != OfferPath)
+        if (path != "/offer" && path != "/answer")
             return (404, ErrorBody("Not found"));
         if (method != "POST")
             return (405, ErrorBody("Method not allowed"));
 
-        SignalingOffer? offer;
-        try
+        if (path == "/offer")
         {
-            offer = string.IsNullOrWhiteSpace(bodyJson)
-                ? null
-                : JsonSerializer.Deserialize<SignalingOffer>(bodyJson);
-        }
-        catch (JsonException)
-        {
-            return (400, ErrorBody("Malformed JSON body"));
-        }
+            var req = TryParse<SignalingOfferRequest>(bodyJson);
+            if (req is null || string.IsNullOrWhiteSpace(req.Pin))
+                return (400, ErrorBody("Expected { \"pin\": \"...\" }"));
+            if (!string.Equals(req.Pin, _expectedPin, StringComparison.Ordinal))
+                return (403, ErrorBody("Invalid PIN"));
 
-        if (offer is null || string.IsNullOrWhiteSpace(offer.Sdp) || offer.Type != "offer")
-            return (400, ErrorBody("Expected { \"sdp\": \"...\", \"type\": \"offer\", \"pin\": \"...\" }"));
-
-        if (!string.Equals(offer.Pin, _expectedPin, StringComparison.Ordinal))
-            return (403, ErrorBody("Invalid PIN"));
-
-        SignalingAnswer answer;
-        try
-        {
-            answer = _handler.HandleOffer(offer);
+            try
+            {
+                var offer = _handler.CreateOffer();
+                return (200, JsonSerializer.Serialize(offer, JsonOptions));
+            }
+            catch (SignalingException ex) { return (ex.StatusCode, ErrorBody(ex.Message)); }
+            catch (Exception ex) { Console.Error.WriteLine($"[signaling] {ex}"); return (500, ErrorBody("Internal signaling error")); }
         }
-        catch (SignalingException ex)
+        else // /answer
         {
-            return (ex.StatusCode, ErrorBody(ex.Message));
-        }
-        catch
-        {
-            return (500, ErrorBody("Internal signaling error"));
-        }
+            var req = TryParse<SignalingAnswerRequest>(bodyJson);
+            if (req is null || string.IsNullOrWhiteSpace(req.Sdp) || req.Type != "answer")
+                return (400, ErrorBody("Expected { \"sdp\": \"...\", \"type\": \"answer\", \"pin\": \"...\" }"));
+            if (!string.Equals(req.Pin, _expectedPin, StringComparison.Ordinal))
+                return (403, ErrorBody("Invalid PIN"));
 
-        return (200, JsonSerializer.Serialize(answer, JsonOptions));
+            try
+            {
+                _handler.ApplyAnswer(req.Sdp);
+                return (200, "{}");
+            }
+            catch (SignalingException ex) { return (ex.StatusCode, ErrorBody(ex.Message)); }
+            catch (Exception ex) { Console.Error.WriteLine($"[signaling] {ex}"); return (500, ErrorBody("Internal signaling error")); }
+        }
+    }
+
+    private static T? TryParse<T>(string? json) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<T>(json); }
+        catch (JsonException) { return null; }
     }
 
     private static string ErrorBody(string message) => JsonSerializer.Serialize(new { error = message });

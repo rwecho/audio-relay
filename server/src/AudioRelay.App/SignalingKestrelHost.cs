@@ -32,12 +32,20 @@ public sealed class SignalingKestrelHost : IDisposable
                 web.UseUrls(_url);
                 web.Configure(app => app.Run(async ctx =>
                 {
+                    string path = ctx.Request.Path.Value ?? "/";
+
+                    if (ctx.Request.Method == "GET" && (path == "/" || path == "/index.html"))
+                    {
+                        ctx.Response.ContentType = "text/html; charset=utf-8";
+                        await ctx.Response.WriteAsync(BrowserClientPage.Html);
+                        return;
+                    }
+
                     string? body = null;
                     if (ctx.Request.ContentLength is > 0)
                         body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
 
-                    var (status, response) = _endpoint.HandleRequest(
-                        ctx.Request.Method, ctx.Request.Path.Value ?? "/", body);
+                    var (status, response) = _endpoint.HandleRequest(ctx.Request.Method, path, body);
 
                     ctx.Response.StatusCode = status;
                     ctx.Response.ContentType = "application/json";

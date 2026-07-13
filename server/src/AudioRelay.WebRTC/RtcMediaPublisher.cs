@@ -9,15 +9,14 @@ using DataChannelDotnet.Impl;
 namespace AudioRelay.WebRTC;
 
 /// <summary>
-/// Owns the libdatachannel PeerConnection and the published Opus audio track.
-/// Implements <see cref="ISignalingHandler"/> (offer → answer) and <see cref="IOpusSink"/>
-/// (writes Opus frames onto the track; libdatachannel packetizes them into RTP with
-/// correct timestamps, sequence numbers and SR reports).
+/// Owns the libdatachannel PeerConnection and the published Opus audio track. The server is
+/// the SDP <b>offerer</b> and audio sender (libdatachannel's supported media role; see the
+/// libdatachannel media-sender example). Implements <see cref="ISignalingHandler"/>
+/// (CreateOffer / ApplyAnswer) and <see cref="IOpusSink"/> (writes Opus frames onto the track;
+/// libdatachannel packetizes them into RTP with SR reports).
 /// </summary>
 /// <remarks>
-/// UNVERIFIED IN UNIT TESTS — exercises the native libdatachannel library. Correctness of
-/// the SDP/ICE/timing path is validated at E2E (browser test-tone client → phone). Excluded
-/// from coverage because every method calls into native code that cannot run in a unit test.
+/// UNVERIFIED IN UNIT TESTS — exercises native libdatachannel. Excluded from coverage.
 /// </remarks>
 [ExcludeFromCodeCoverage]
 public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposable
@@ -27,11 +26,11 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
     private readonly object _gate = new();
     private IRtcPeerConnection? _peer;
     private IRtcTrack? _track;
-    private long _framesSent;
-    private long _bytesSent;
 
     /// <summary>Raised with true when a client connects, false when it disconnects.</summary>
     public event Action<bool>? ClientConnectionChanged;
+
+    public bool IsClientConnected { get; private set; }
 
     public RtcMediaPublisher(string cname = RtcMediaConfig.DefaultCname)
     {
@@ -39,10 +38,8 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
         _cname = cname;
     }
 
-    /// <summary>True once a client is connected and audio can flow.</summary>
-    public bool IsClientConnected { get; private set; }
-
-    public SignalingAnswer HandleOffer(SignalingOffer offer)
+    /// <summary>Creates a fresh PeerConnection with a SendOnly Opus track and returns its offer SDP.</summary>
+    public SignalingSdp CreateOffer()
     {
         lock (_gate)
         {
@@ -76,16 +73,13 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
             track.AddRtcpNackResponder(maxPackets: 0);
             _track = track;
 
-            // Non-trickle: accept the offer, generate the answer, wait for ICE gathering to
-            // embed host candidates in the answer (LAN only — no STUN/TURN needed).
-            peer.SetRemoteDescription(new RtcDescription { Sdp = offer.Sdp, Type = RtcDescriptionType.Offer });
-            peer.SetLocalDescription(RtcDescriptionType.Answer);
+            // Generate the offer and wait for ICE gathering to embed host candidates (LAN).
+            peer.SetLocalDescription(RtcDescriptionType.Offer);
 
             var gathered = new ManualResetEventSlim(false);
             peer.OnGatheringStateChange += (_, g) =>
             {
-                if (g == rtcGatheringState.RTC_GATHERING_COMPLETE)
-                    gathered.Set();
+                if (g == rtcGatheringState.RTC_GATHERING_COMPLETE) gathered.Set();
             };
 
             if (!gathered.Wait(TimeSpan.FromSeconds(5)))
@@ -95,7 +89,20 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
             if (string.IsNullOrEmpty(sdp))
                 throw new SignalingException(500, "Failed to generate local description");
 
-            return new SignalingAnswer(sdp, "answer");
+            // Browsers reject libdatachannel's bare "a=ssrc:NNN"; append the cname attribute.
+            string fixedSdp = SdpFixup.EnsureSsrcCname(sdp, _cname);
+            return new SignalingSdp(fixedSdp, "offer");
+        }
+    }
+
+    /// <summary>Applies the client's answer SDP to complete negotiation.</summary>
+    public void ApplyAnswer(string answerSdp)
+    {
+        lock (_gate)
+        {
+            if (_peer is null)
+                throw new SignalingException(409, "No pending offer");
+            _peer.SetRemoteDescription(new RtcDescription { Sdp = answerSdp, Type = RtcDescriptionType.Answer });
         }
     }
 
@@ -110,6 +117,9 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
             Interlocked.Add(ref _bytesSent, opusFrame.Length);
         }
     }
+
+    private long _framesSent;
+    private long _bytesSent;
 
     /// <summary>Cumulative counters for the stats panel.</summary>
     public PublisherStats GetStats() => new(_framesSent, _bytesSent, IsClientConnected);
