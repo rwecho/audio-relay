@@ -12,21 +12,26 @@ namespace AudioRelay.Audio;
 public sealed class AudioPipeline : IDisposable
 {
     private readonly IAudioCapturer _capturer;
-    private readonly IOpusSink _sink;
-    private readonly FloatToInt16Framer _framer;
-    private readonly OpusEncoderAdapter _encoder;
+    private readonly IOpusSink? _sink; // optional legacy Opus media path
+    private readonly IAudioDataSink? _dataSink; // primary: raw PCM over a libdatachannel datachannel
+    private readonly FloatToInt16Framer? _framer;
+    private readonly OpusEncoderAdapter? _encoder;
     private readonly GainStage _gain = new();
     private readonly LevelMeter _level = new();
     private readonly BassAnalyzer _bass;
     private bool _capturing;
     private bool _sending;
 
-    public AudioPipeline(IAudioCapturer capturer, IOpusSink sink, OpusEncoderAdapter? encoder = null)
+    public AudioPipeline(IAudioCapturer capturer, IOpusSink? sink = null, IAudioDataSink? dataSink = null, OpusEncoderAdapter? encoder = null)
     {
         _capturer = capturer;
         _sink = sink;
-        _encoder = encoder ?? new OpusEncoderAdapter(capturer.Format.SampleRate, capturer.Format.Channels);
-        _framer = new FloatToInt16Framer(_encoder.SamplesPerChannel, capturer.Format.Channels);
+        _dataSink = dataSink;
+        if (sink is not null)
+        {
+            _encoder = encoder ?? new OpusEncoderAdapter(capturer.Format.SampleRate, capturer.Format.Channels);
+            _framer = new FloatToInt16Framer(_encoder.SamplesPerChannel, capturer.Format.Channels);
+        }
         _bass = new BassAnalyzer(capturer.Format.Channels);
         _capturer.SamplesAvailable += OnSamples;
     }
@@ -83,11 +88,9 @@ public sealed class AudioPipeline : IDisposable
         if (!_sending) return;
 
         _gain.Apply(samples.AsSpan()); // in-place; capturer supplies a fresh buffer per chunk
-        _framer.Feed(samples.AsSpan(), frame =>
-        {
-            byte[] opus = _encoder.Encode(frame);
-            _sink.Send(opus);
-        });
+        _dataSink?.Send(samples.AsSpan()); // primary: raw PCM over libdatachannel datachannel
+        if (_sink is not null && _framer is not null && _encoder is not null)
+            _framer.Feed(samples.AsSpan(), frame => _sink.Send(_encoder.Encode(frame)));
     }
 
     public void Dispose()

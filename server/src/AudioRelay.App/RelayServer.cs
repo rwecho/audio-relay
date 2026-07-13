@@ -15,7 +15,7 @@ public sealed class RelayServer : IDisposable
 {
     private readonly Settings _settings;
     private readonly ILogger _log;
-    private readonly RtcMediaPublisher _publisher;
+    private readonly RtcDataChannelPublisher _publisher;
     private readonly SignalingEndpoint _endpoint;
     private readonly SignalingKestrelHost _host;
     private WasapiLoopbackCapturer _capturer;
@@ -31,9 +31,9 @@ public sealed class RelayServer : IDisposable
         string? bindIp = !string.IsNullOrEmpty(settings.SelectedAdapterIp)
             ? settings.SelectedAdapterIp
             : Network.GetCandidateAddresses().FirstOrDefault()?.Ip;
-        _publisher = new RtcMediaPublisher(RtcMediaConfig.DefaultCname, bindIp);
+        _publisher = new RtcDataChannelPublisher(bindIp);
         _capturer = CreateCapturer();
-        _pipeline = new AudioPipeline(_capturer, _publisher) { Volume = settings.Volume };
+        _pipeline = new AudioPipeline(_capturer, dataSink: _publisher) { Volume = settings.Volume };
         _endpoint = new SignalingEndpoint(settings.Pin, _publisher, BuildStats);
         _host = new SignalingKestrelHost($"http://0.0.0.0:{settings.Port}", _endpoint);
 
