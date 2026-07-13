@@ -93,7 +93,7 @@ public partial class App : Application
                 var clients = s.GetClients();
                 vm.ConnectedCount = clients.Count;
                 vm.ClientLines = clients
-                    .Select(c => $"#{c.Id} · {c.Fps:0.0} fps · {(c.LatencyMs.HasValue ? $"{c.LatencyMs.Value:0} ms" : "—")}")
+                    .Select(c => $"#{c.Id} · {c.ConnectedSeconds:0}s · {(c.LatencyMs.HasValue ? $"{c.LatencyMs.Value:0} ms" : "—")}")
                     .ToList();
                 vm.StatsSummary = st.ClientConnected
                     ? $"已连接 {clients.Count} 个客户端 · 已发 {st.FramesSent} 帧"
