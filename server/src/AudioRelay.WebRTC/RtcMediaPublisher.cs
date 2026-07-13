@@ -87,17 +87,19 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
     /// <summary>Creates a fresh PeerConnection + SendOnly Opus track for a NEW listener, returns its offer.</summary>
     public SignalingSdp CreateOffer()
     {
+        Session s;
+        RtcPeerConnection peer;
+        ManualResetEventSlim gathered;
+        // Phase 1 (brief lock): set up peer + track + register the session + kick off gathering.
         lock (_gate)
         {
             ExpireStalePending();
-            var s = new Session((uint)Random.Shared.Next(1, int.MaxValue));
+            s = new Session((uint)Random.Shared.Next(1, int.MaxValue));
 
-            // Bind ICE to the selected IPv4 interface only: libjuice hangs gathering on IPv6 on
-            // some multi-interface Windows hosts (binds only ::1, never completes). Binding one
-            // IPv4 address avoids the hang + advertises only the reachable LAN candidate.
+            // Bind ICE to the selected IPv4 interface only (avoids libjuice hanging on IPv6).
             var config = new RtcPeerConfiguration();
             if (!string.IsNullOrEmpty(_bindAddress)) config.BindAddress = _bindAddress;
-            var peer = new RtcPeerConnection(config);
+            peer = new RtcPeerConnection(config);
             s.Peer = peer;
             peer.OnConnectionStateChange += (_, state) => OnSessionState(s, state);
 
@@ -107,34 +109,38 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
             track.AddRtcpNackResponder(maxPackets: 0);
             s.Track = track;
 
-            // Generate the offer and wait for ICE gathering to embed host candidates (LAN).
-            var gathered = new ManualResetEventSlim(false);
+            gathered = new ManualResetEventSlim(false);
             peer.OnGatheringStateChange += (_, g) =>
             {
                 if (g == rtcGatheringState.RTC_GATHERING_COMPLETE) gathered.Set();
             };
-            peer.SetLocalDescription(RtcDescriptionType.Offer);
+            peer.SetLocalDescription(RtcDescriptionType.Offer); // starts gathering
             if (peer.GatheringState == rtcGatheringState.RTC_GATHERING_COMPLETE)
                 gathered.Set();
 
-            if (!gathered.Wait(TimeSpan.FromSeconds(5)))
-            {
-                s.Dispose();
-                throw new SignalingException(503, "ICE gathering timed out");
-            }
-            string? sdp = peer.LocalDescription;
-            if (string.IsNullOrEmpty(sdp))
-            {
-                s.Dispose();
-                throw new SignalingException(500, "Failed to generate local description");
-            }
-
             _sessions[s.Id] = s;
             _pending.Enqueue(s.Id);
-            string fixedSdp = SdpFixup.EnsureSsrcCname(sdp, _cname);
-            fixedSdp = SdpFixup.EnsureIpv4Only(fixedSdp); // IPv4-only: avoid broken IPv6 pairs (libdatachannel #1006)
-            return new SignalingSdp(fixedSdp, "offer");
         }
+
+        // Phase 2 (NO lock): wait for gathering. CRITICAL — libjuice fires OnConnectionStateChange
+        // on the gathering thread, and OnSessionState needs _gate. Holding _gate during this Wait
+        // deadlocks libjuice's gatherer, so gathering never completes (the 503 'ICE gathering
+        // timed out'). The lock is only held for the brief _sessions mutations above + on cleanup.
+        if (!gathered.Wait(TimeSpan.FromSeconds(5)))
+        {
+            lock (_gate) _sessions.Remove(s.Id);
+            s.Dispose();
+            throw new SignalingException(503, "ICE gathering timed out");
+        }
+        string? sdp = peer.LocalDescription;
+        if (string.IsNullOrEmpty(sdp))
+        {
+            lock (_gate) _sessions.Remove(s.Id);
+            s.Dispose();
+            throw new SignalingException(500, "Failed to generate local description");
+        }
+        string fixedSdp = SdpFixup.EnsureIpv4Only(SdpFixup.EnsureSsrcCname(sdp, _cname));
+        return new SignalingSdp(fixedSdp, "offer");
     }
 
     /// <summary>Applies the client's answer to the oldest pending session (FIFO).</summary>
