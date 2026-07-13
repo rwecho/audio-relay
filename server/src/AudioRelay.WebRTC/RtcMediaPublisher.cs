@@ -125,6 +125,7 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
             _sessions[s.Id] = s;
             _pending.Enqueue(s.Id);
             string fixedSdp = SdpFixup.EnsureSsrcCname(sdp, _cname);
+            fixedSdp = SdpFixup.EnsureIpv4Only(fixedSdp); // IPv4-only: avoid broken IPv6 pairs (libdatachannel #1006)
             return new SignalingSdp(fixedSdp, "offer");
         }
     }
