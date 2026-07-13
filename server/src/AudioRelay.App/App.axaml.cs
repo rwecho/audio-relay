@@ -103,7 +103,7 @@ public partial class App : Application
             if (_server is { } s)
             {
                 vm.Level = s.CurrentLevel;
-                vm.Waveform = s.SnapshotWaveform(96);
+                vm.Bass = s.CurrentBass;
             }
         });
         _waveformTimer.Start();

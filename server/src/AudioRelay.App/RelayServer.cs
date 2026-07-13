@@ -7,9 +7,8 @@ namespace AudioRelay.App;
 
 /// <summary>
 /// Assembles the relay: WASAPI capture → framing/Opus/gain → WebRTC publisher, with HTTP
-/// signaling over Kestrel. Capture runs always-on (driving the level/waveform meter); Opus
-/// encode/send is gated to only while a client is connected. Integration assembly; excluded
-/// from coverage.
+/// signaling over Kestrel. Capture runs always-on (driving the level/bass meters); Opus encode/send
+/// is gated to only while a client is connected. Integration assembly; excluded from coverage.
 /// </summary>
 [ExcludeFromCodeCoverage]
 public sealed class RelayServer : IDisposable
@@ -49,15 +48,15 @@ public sealed class RelayServer : IDisposable
         set => _pipeline.Volume = value;
     }
 
-    /// <summary>Live loudness (RMS) for the tray waveform and the client level meter.</summary>
+    /// <summary>Live loudness (RMS) for the tray meter.</summary>
     public double CurrentLevel => _pipeline.Level.LatestRms;
 
-    /// <summary>Recent level history (oldest→newest, 0..1) for waveform rendering.</summary>
-    public float[] SnapshotWaveform(int count) => _pipeline.Level.Snapshot(count);
+    /// <summary>Live bass-band impact (0..1) driving the rhythm-particle effect.</summary>
+    public double CurrentBass => _pipeline.Bass.LatestBass;
 
     public PublisherStats GetStats() => _publisher.GetStats();
 
-    /// <summary>Object serialized by GET /stats: publish counters + live audio level.</summary>
+    /// <summary>Object serialized by GET /stats: publish counters + live audio level/bass.</summary>
     private object BuildStats()
     {
         var p = _publisher.GetStats();
@@ -67,14 +66,15 @@ public sealed class RelayServer : IDisposable
             p.BytesSent,
             p.ClientConnected,
             Level = _pipeline.Level.LatestRms,
-            Peak = _pipeline.Level.LatestPeak
+            Peak = _pipeline.Level.LatestPeak,
+            Bass = _pipeline.Bass.LatestBass
         };
     }
 
     public void Start()
     {
         _host.Start();
-        _pipeline.StartCapture(); // always-on level/waveform meter, even with no client
+        _pipeline.StartCapture(); // always-on level/bass meter, even with no client
         _log.Info($"Relay listening on :{_settings.Port} (pin {_settings.Pin})");
     }
 

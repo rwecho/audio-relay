@@ -108,6 +108,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set { _waveform = value; OnPropertyChanged(); }
     }
 
+    private double _bass;
+
+    /// <summary>Live bass impact (0..1) driving the rhythm-particle effect.</summary>
+    public double Bass
+    {
+        get => _bass;
+        set { _bass = value; OnPropertyChanged(); }
+    }
+
     private void UpdateStatus()
     {
         Status = _clientConnected

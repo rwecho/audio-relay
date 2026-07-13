@@ -17,6 +17,7 @@ public sealed class AudioPipeline : IDisposable
     private readonly OpusEncoderAdapter _encoder;
     private readonly GainStage _gain = new();
     private readonly LevelMeter _level = new();
+    private readonly BassAnalyzer _bass;
     private bool _capturing;
     private bool _sending;
 
@@ -26,6 +27,7 @@ public sealed class AudioPipeline : IDisposable
         _sink = sink;
         _encoder = encoder ?? new OpusEncoderAdapter(capturer.Format.SampleRate, capturer.Format.Channels);
         _framer = new FloatToInt16Framer(_encoder.SamplesPerChannel, capturer.Format.Channels);
+        _bass = new BassAnalyzer(capturer.Format.Channels);
         _capturer.SamplesAvailable += OnSamples;
     }
 
@@ -36,6 +38,9 @@ public sealed class AudioPipeline : IDisposable
     public bool IsSending => _sending;
 
     public LevelMeter Level => _level;
+
+    /// <summary>Streaming bass-band energy (0..1) for the rhythm-particle effect.</summary>
+    public BassAnalyzer Bass => _bass;
 
     /// <summary>Volume multiplier (0 = mute, 1 = unity). Smoothly ramped to avoid pops.</summary>
     public double Volume
@@ -73,7 +78,8 @@ public sealed class AudioPipeline : IDisposable
     private void OnSamples(object? sender, ArraySegment<float> samples)
     {
         if (!_capturing) return;
-        _level.Update(samples.AsSpan()); // level always tracks playback while capturing
+        _level.Update(samples.AsSpan());  // level always tracks playback while capturing
+        _bass.Update(samples.AsSpan());   // bass (FFT) feeds the rhythm particles
         if (!_sending) return;
 
         _gain.Apply(samples.AsSpan()); // in-place; capturer supplies a fresh buffer per chunk

@@ -5,11 +5,11 @@
         x:Class="AudioRelay.App.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Audio Relay"
-        Width="380" Height="800"
-        MinWidth="380" MinHeight="800"
+        Width="380" Height="920"
+        MinWidth="380" MinHeight="920"
         WindowStartupLocation="CenterScreen"
         CanResize="False"
-        Background="#1C1C1E">
+        Background="#050510">
 
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="32,24,32,28">
 
@@ -37,16 +37,15 @@
         <Border Grid.Row="2"
                 Background="White"
                 CornerRadius="20"
-                Padding="14"
+                Padding="10"
                 HorizontalAlignment="Center"
                 Margin="0,0,0,10"
                 BoxShadow="0 8 24 0 #80000000">
-            <Image Name="QrImage" Width="180" Height="180" />
+            <Image Name="QrImage" Width="168" Height="168" />
         </Border>
 
-        <ctrl:WaveformView Grid.Row="3"
-                           Waveform="{Binding Waveform}"
-                           Width="240" Height="48"
+        <ctrl:ParticleView Grid.Row="3"
+                           Bass="{Binding Bass}"
                            HorizontalAlignment="Center"
                            Margin="0,0,0,10" />
 
