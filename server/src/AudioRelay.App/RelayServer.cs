@@ -26,7 +26,12 @@ public sealed class RelayServer : IDisposable
     {
         _settings = settings;
         _log = logger;
-        _publisher = new RtcMediaPublisher();
+        // Bind ICE to the selected adapter's IPv4 so libjuice gathers only that interface
+        // (avoids hanging on IPv6). Falls back to the top-ranked candidate if none chosen.
+        string? bindIp = !string.IsNullOrEmpty(settings.SelectedAdapterIp)
+            ? settings.SelectedAdapterIp
+            : Network.GetCandidateAddresses().FirstOrDefault()?.Ip;
+        _publisher = new RtcMediaPublisher(RtcMediaConfig.DefaultCname, bindIp);
         _capturer = CreateCapturer();
         _pipeline = new AudioPipeline(_capturer, _publisher) { Volume = settings.Volume };
         _endpoint = new SignalingEndpoint(settings.Pin, _publisher, BuildStats);

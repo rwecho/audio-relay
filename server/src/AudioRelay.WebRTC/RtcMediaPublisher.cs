@@ -45,6 +45,7 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
     private static readonly TimeSpan PendingTtl = TimeSpan.FromSeconds(15);
 
     private readonly string _cname;
+    private readonly string? _bindAddress; // when set, libjuice binds only this interface (IPv4-only gathering)
     private readonly object _gate = new();
     private readonly Dictionary<string, Session> _sessions = new();
     private readonly Queue<string> _pending = new(); // FIFO of pending session ids awaiting answer
@@ -62,7 +63,8 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
         get { lock (_gate) { return _sessions.Values.Count(s => s.Connected); } }
     }
 
-    public RtcMediaPublisher(string cname = RtcMediaConfig.DefaultCname) => _cname = cname;
+    public RtcMediaPublisher(string cname = RtcMediaConfig.DefaultCname, string? bindAddress = null)
+    { _cname = cname; _bindAddress = bindAddress; }
 
     /// <summary>Snapshot of every connected listener for the UI / /stats.</summary>
     public IReadOnlyList<ConnectedClient> GetClients()
@@ -90,7 +92,12 @@ public sealed class RtcMediaPublisher : IOpusSink, ISignalingHandler, IDisposabl
             ExpireStalePending();
             var s = new Session((uint)Random.Shared.Next(1, int.MaxValue));
 
-            var peer = new RtcPeerConnection(new RtcPeerConfiguration());
+            // Bind ICE to the selected IPv4 interface only: libjuice hangs gathering on IPv6 on
+            // some multi-interface Windows hosts (binds only ::1, never completes). Binding one
+            // IPv4 address avoids the hang + advertises only the reachable LAN candidate.
+            var config = new RtcPeerConfiguration();
+            if (!string.IsNullOrEmpty(_bindAddress)) config.BindAddress = _bindAddress;
+            var peer = new RtcPeerConnection(config);
             s.Peer = peer;
             peer.OnConnectionStateChange += (_, state) => OnSessionState(s, state);
 
