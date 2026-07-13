@@ -29,4 +29,19 @@ class SignalingClient {
 
     if (resp.statusCode != 200) throw Exception('提交 answer 失败 (${resp.statusCode})');
   }
+
+  /// Live bass impact (0..1) from GET /stats. No PIN required. Returns 0 on any error so the
+  /// rhythm-particle effect stays calm when stats is unreachable.
+  Future<double> fetchBass() async {
+    try {
+      final resp = await http
+          .get(Uri.parse('$baseUrl/stats'))
+          .timeout(const Duration(seconds: 2));
+      if (resp.statusCode != 200) return 0;
+      final j = jsonDecode(resp.body) as Map<String, dynamic>;
+      return (j['Bass'] as num?)?.toDouble() ?? 0.0;
+    } catch (_) {
+      return 0;
+    }
+  }
 }

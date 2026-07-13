@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'webrtc_client.dart';
 import 'signaling_client.dart';
+import 'particle_painter.dart';
 
 class PlayerPage extends StatefulWidget {
   final String url;
@@ -52,9 +53,8 @@ class _PlayerPageState extends State<PlayerPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.graphic_eq,
-                  size: 96, color: live ? const Color(0xFF0A84FF) : Colors.white24),
-              const SizedBox(height: 24),
+              RhythmParticles(url: widget.url),
+              const SizedBox(height: 16),
               Text(_statusText,
                   style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
