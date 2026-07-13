@@ -110,6 +110,50 @@ public class AudioPipelineTests
         Assert.Empty(sink.Frames);
     }
 
+    [Fact]
+    public void CaptureOnly_UpdatesLevelButSendsNoFrames()
+    {
+        var capturer = new FakeCapturer();
+        var sink = new CollectingSink();
+        var pipeline = new AudioPipeline(capturer, sink);
+        pipeline.StartCapture();
+
+        capturer.Emit(Enumerable.Repeat(0.5f, FrameLength).ToArray());
+
+        Assert.Empty(sink.Frames);
+        Assert.InRange(pipeline.Level.LatestRms, 0.49, 0.51);
+    }
+
+    [Fact]
+    public void StartSending_AfterCapture_EmitsFrames()
+    {
+        var capturer = new FakeCapturer();
+        var sink = new CollectingSink();
+        var pipeline = new AudioPipeline(capturer, sink);
+        pipeline.StartCapture();
+        capturer.Emit(new float[FrameLength]); // captured, not sent
+        Assert.Empty(sink.Frames);
+
+        pipeline.StartSending();
+        capturer.Emit(new float[FrameLength]);
+        Assert.Single(sink.Frames);
+    }
+
+    [Fact]
+    public void StopSending_HaltsEncodeWhileCaptureContinues()
+    {
+        var capturer = new FakeCapturer();
+        var sink = new CollectingSink();
+        var pipeline = new AudioPipeline(capturer, sink);
+        pipeline.Start();
+
+        pipeline.StopSending();
+        capturer.Emit(new float[FrameLength]);
+
+        Assert.Empty(sink.Frames);
+        Assert.True(pipeline.IsCapturing);
+    }
+
     private sealed class FakeCapturer : IAudioCapturer
     {
         public AudioFormat Format { get; set; } = new(48000, 2);

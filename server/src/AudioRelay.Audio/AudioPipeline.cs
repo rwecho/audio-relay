@@ -4,10 +4,10 @@ namespace AudioRelay.Audio;
 
 /// <summary>
 /// Wires the real-time audio path: capturer (48k float) → framing → Opus encode → sink.
-/// Driven entirely by <see cref="IAudioCapturer.SamplesAvailable"/> (the real-time capture
-/// clock), so Opus frames leave at capture rate with no sender-side buffering. The sink
-/// (WebRTC) hands each Opus frame to libdatachannel, which packetizes it into RTP
-/// (timestamps + sequence numbers + SR reporter) and sends it.
+/// Capture and send are split so the level/waveform meter can run always-on (tracking whatever the
+/// PC is playing) while the Opus encode/send is gated to only when a client is connected (saves CPU
+/// when idle). Driven entirely by <see cref="IAudioCapturer.SamplesAvailable"/> (the real-time
+/// capture clock), so Opus frames leave at capture rate with no sender-side buffering.
 /// </summary>
 public sealed class AudioPipeline : IDisposable
 {
@@ -16,7 +16,9 @@ public sealed class AudioPipeline : IDisposable
     private readonly FloatToInt16Framer _framer;
     private readonly OpusEncoderAdapter _encoder;
     private readonly GainStage _gain = new();
-    private bool _running;
+    private readonly LevelMeter _level = new();
+    private bool _capturing;
+    private bool _sending;
 
     public AudioPipeline(IAudioCapturer capturer, IOpusSink sink, OpusEncoderAdapter? encoder = null)
     {
@@ -27,7 +29,13 @@ public sealed class AudioPipeline : IDisposable
         _capturer.SamplesAvailable += OnSamples;
     }
 
-    public bool IsRunning => _running;
+    /// <summary>True while the capturer is running (meter is live).</summary>
+    public bool IsRunning => _capturing;
+    public bool IsCapturing => _capturing;
+    /// <summary>True while Opus frames are being encoded/sent to a connected client.</summary>
+    public bool IsSending => _sending;
+
+    public LevelMeter Level => _level;
 
     /// <summary>Volume multiplier (0 = mute, 1 = unity). Smoothly ramped to avoid pops.</summary>
     public double Volume
@@ -36,24 +44,37 @@ public sealed class AudioPipeline : IDisposable
         set => _gain.Volume = (float)value;
     }
 
-    public void Start()
+    /// <summary>Capture + send together (convenience for relay-only lifecycles).</summary>
+    public void Start() { StartCapture(); _sending = true; }
+
+    public void Stop() { _sending = false; StopCapture(); }
+
+    /// <summary>Begin capturing for the level/waveform meter (always-on).</summary>
+    public void StartCapture()
     {
-        if (_running) return;
-        _running = true;
+        if (_capturing) return;
+        _capturing = true;
         _gain.Reset(); // fade in from silence to avoid a startup pop
         _capturer.Start();
     }
 
-    public void Stop()
+    public void StopCapture()
     {
-        if (!_running) return;
-        _running = false;
+        if (!_capturing) return;
+        _capturing = false;
+        _sending = false;
         _capturer.Stop();
     }
 
+    /// <summary>Gate Opus encode/send on client connection (capture keeps running for the meter).</summary>
+    public void StartSending() => _sending = true;
+    public void StopSending() => _sending = false;
+
     private void OnSamples(object? sender, ArraySegment<float> samples)
     {
-        if (!_running) return;
+        if (!_capturing) return;
+        _level.Update(samples.AsSpan()); // level always tracks playback while capturing
+        if (!_sending) return;
 
         _gain.Apply(samples.AsSpan()); // in-place; capturer supplies a fresh buffer per chunk
         _framer.Feed(samples.AsSpan(), frame =>
@@ -65,7 +86,7 @@ public sealed class AudioPipeline : IDisposable
 
     public void Dispose()
     {
-        Stop();
+        StopCapture();
         _capturer.SamplesAvailable -= OnSamples;
     }
 }

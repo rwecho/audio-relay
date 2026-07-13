@@ -7,8 +7,9 @@ namespace AudioRelay.App;
 
 /// <summary>
 /// Assembles the relay: WASAPI capture → framing/Opus/gain → WebRTC publisher, with HTTP
-/// signaling over Kestrel. Audio runs only while a client is connected. Integration assembly;
-/// excluded from coverage.
+/// signaling over Kestrel. Capture runs always-on (driving the level/waveform meter); Opus
+/// encode/send is gated to only while a client is connected. Integration assembly; excluded
+/// from coverage.
 /// </summary>
 [ExcludeFromCodeCoverage]
 public sealed class RelayServer : IDisposable
@@ -29,7 +30,7 @@ public sealed class RelayServer : IDisposable
         _publisher = new RtcMediaPublisher();
         _capturer = CreateCapturer();
         _pipeline = new AudioPipeline(_capturer, _publisher) { Volume = settings.Volume };
-        _endpoint = new SignalingEndpoint(settings.Pin, _publisher, () => _publisher.GetStats());
+        _endpoint = new SignalingEndpoint(settings.Pin, _publisher, BuildStats);
         _host = new SignalingKestrelHost($"http://0.0.0.0:{settings.Port}", _endpoint);
 
         _publisher.ClientConnectionChanged += OnClientConnection;
@@ -48,11 +49,32 @@ public sealed class RelayServer : IDisposable
         set => _pipeline.Volume = value;
     }
 
+    /// <summary>Live loudness (RMS) for the tray waveform and the client level meter.</summary>
+    public double CurrentLevel => _pipeline.Level.LatestRms;
+
+    /// <summary>Recent level history (oldest→newest, 0..1) for waveform rendering.</summary>
+    public float[] SnapshotWaveform(int count) => _pipeline.Level.Snapshot(count);
+
     public PublisherStats GetStats() => _publisher.GetStats();
+
+    /// <summary>Object serialized by GET /stats: publish counters + live audio level.</summary>
+    private object BuildStats()
+    {
+        var p = _publisher.GetStats();
+        return new
+        {
+            p.FramesSent,
+            p.BytesSent,
+            p.ClientConnected,
+            Level = _pipeline.Level.LatestRms,
+            Peak = _pipeline.Level.LatestPeak
+        };
+    }
 
     public void Start()
     {
         _host.Start();
+        _pipeline.StartCapture(); // always-on level/waveform meter, even with no client
         _log.Info($"Relay listening on :{_settings.Port} (pin {_settings.Pin})");
     }
 
@@ -60,7 +82,7 @@ public sealed class RelayServer : IDisposable
     public void ChangeDevice(string? deviceId)
     {
         _settings.DeviceId = deviceId;
-        bool wasRunning = _pipeline.IsRunning && _clientConnected;
+        bool wasSending = _clientConnected;
 
         _pipeline.Dispose();
         _capturer.DefaultDeviceChanged -= OnDefaultDeviceChanged;
@@ -70,7 +92,8 @@ public sealed class RelayServer : IDisposable
         _capturer.DefaultDeviceChanged += OnDefaultDeviceChanged;
         _pipeline = new AudioPipeline(_capturer, _publisher) { Volume = _settings.Volume };
 
-        if (wasRunning) _pipeline.Start();
+        _pipeline.StartCapture();              // meter keeps running
+        if (wasSending) _pipeline.StartSending();
         _log.Info(deviceId is null ? "Switched to system default device." : $"Switched to device {deviceId}.");
     }
 
@@ -78,7 +101,8 @@ public sealed class RelayServer : IDisposable
 
     private void OnDefaultDeviceChanged(object? sender, EventArgs e)
     {
-        // Same capturer object; restart inner capture on the new default, pipeline keeps its subscription.
+        // Same capturer object; restart inner capture on the new default. Pipeline keeps its
+        // subscription + capture/sending flags.
         _log.Info("Default audio device changed; restarting capture.");
         _capturer.Stop();
         _capturer.Start();
@@ -87,8 +111,8 @@ public sealed class RelayServer : IDisposable
     private void OnClientConnection(bool connected)
     {
         _clientConnected = connected;
-        if (connected) { _pipeline.Start(); _log.Info("Client connected."); }
-        else { _pipeline.Stop(); _log.Info("Client disconnected."); }
+        if (connected) { _pipeline.StartSending(); _log.Info("Client connected."); }
+        else { _pipeline.StopSending(); _log.Info("Client disconnected."); }
     }
 
     public void Dispose()

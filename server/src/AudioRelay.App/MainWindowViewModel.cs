@@ -92,6 +92,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set { _selectedAdapter = value; OnPropertyChanged(); }
     }
 
+    private double _level;
+    private float[] _waveform = Array.Empty<float>();
+
+    /// <summary>Instantaneous loudness (RMS) and the rolling waveform envelope for the tray UI.</summary>
+    public double Level
+    {
+        get => _level;
+        set { _level = value; OnPropertyChanged(); }
+    }
+
+    public float[] Waveform
+    {
+        get => _waveform;
+        set { _waveform = value; OnPropertyChanged(); }
+    }
+
     private void UpdateStatus()
     {
         Status = _clientConnected

@@ -15,6 +15,7 @@ public partial class App : Application
     private string _settingsPath = null!;
     private FileLogger _logger = null!;
     private DispatcherTimer? _statsTimer;
+    private DispatcherTimer? _waveformTimer;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -95,6 +96,17 @@ public partial class App : Application
             }
         });
         _statsTimer.Start();
+
+        // ~30Hz waveform: cheap (reads volatile scalars + a short locked snapshot from the capture thread).
+        _waveformTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Normal, (_, _) =>
+        {
+            if (_server is { } s)
+            {
+                vm.Level = s.CurrentLevel;
+                vm.Waveform = s.SnapshotWaveform(96);
+            }
+        });
+        _waveformTimer.Start();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.MainWindow = new MainWindow { DataContext = vm };
