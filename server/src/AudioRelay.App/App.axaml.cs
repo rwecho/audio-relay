@@ -4,8 +4,6 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using DataChannelDotnet;
-using DataChannelDotnet.Bindings;
 
 namespace AudioRelay.App;
 
@@ -18,7 +16,6 @@ public partial class App : Application
     private FileLogger _logger = null!;
     private DispatcherTimer? _statsTimer;
     private DispatcherTimer? _waveformTimer;
-    private RtcLogCallback? _rtcLog;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -30,11 +27,6 @@ public partial class App : Application
         _settingsPath = Path.Combine(appData, "settings.json");
         _settings = SettingsStore.Load(_settingsPath);
         _logger = new FileLogger(Path.Combine(appData, "audio-relay.log"));
-
-        // Route libdatachannel logs to the file so we can see why connections drop (ICE/DTLS/SRTP).
-        _rtcLog = (lvl, msg) => { try { _logger.Info($"[rtc:{lvl}] {msg.TrimEnd()}"); } catch { } };
-        try { Rtc.rtcInitLogger(rtcLogLevel.RTC_LOG_INFO, _rtcLog); }
-        catch (Exception ex) { _logger.Warn($"rtcInitLogger failed: {ex.Message}"); }
 
         if (_settings.AutoStart)
         {
